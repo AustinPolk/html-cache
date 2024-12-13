@@ -1,5 +1,5 @@
 import hashlib
-import blosc2
+import brotli
 import sys
 
 # custom implementation of a database table with two columns, url and html
@@ -19,10 +19,10 @@ class html_cache:
         return hashlib.sha256(url.encode('utf-8')).digest()
     
     def _compress(self, html_content: bytes) -> bytes:
-        return blosc2.compress(html_content)
+        return brotli.compress(html_content)
     
     def _decompress(self, compressed: bytes) -> bytes:
-        return blosc2.decompress(compressed)
+        return brotli.decompress(compressed)
     
     # find the index of this hash in the table index list or where this hash would be inserted,
     # return that index and a boolean indicating whether the hash exists at this index
@@ -60,7 +60,6 @@ class html_cache:
         if in_cache:
             self.content[idx] = compressed
         else:
-            # TODO: do I need to do idx + 1 or just idx
             self.index.insert(idx, hashed)
             self.content.insert(idx, compressed)
 
