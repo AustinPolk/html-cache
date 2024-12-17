@@ -5,10 +5,12 @@ import sys
 # custom implementation of a database table with two columns, url and html
 # the url will be hashed and used as a search key on the table, which will be sorted by hash value (hashing done with SHA256)
 # the html will be compressed bytes that are decompressed when fetched (compression done thru blosc2)
-class html_cache:
-    def __init__(self):
-        self.index: list[bytes] = []    # index of cache, will be hashes of known urls
-        self.content: list[bytes] = []  # cache content, bytes representing compressed html
+class byte_cache:
+    def __init__(self, cache_file: str) -> None:
+        self.index: list[bytes] = []            # index of cache, will be hashes of known urls
+        self.content: list[bytes] = []          # cache content, bytes representing compressed html
+
+        self.cache_file: str = cache_file       # filepath where contents are saved to and loaded from
 
         # constants
         self._int_width: int = 5
@@ -80,8 +82,8 @@ class html_cache:
     # for each content:
     #   integer signifying the length of the compressed content (5 byte integer)
     #   bytes in compressed content (variable byte length)
-    def save(self, filepath: str) -> None:
-        with open(filepath, 'wb+') as f:
+    def save(self) -> None:
+        with open(self.cache_file, 'wb+') as f:
             index_size = len(self.index)
             index_size_bytes = index_size.to_bytes(self._int_width, self._byteorder)
             f.write(index_size_bytes)
@@ -94,8 +96,8 @@ class html_cache:
                 f.write(content)
 
     # load the cache from a binary file, following the same spec used in the save method
-    def load(self, filepath: str) -> None:
-        with open(filepath, 'rb') as f:
+    def load(self) -> None:
+        with open(self.cache_file, 'rb') as f:
             index_size_bytes = f.read(self._int_width)
             index_size = int.from_bytes(index_size_bytes, self._byteorder)
             for _ in range(index_size):
@@ -106,3 +108,35 @@ class html_cache:
                 content_size = int.from_bytes(content_size_bytes, self._byteorder)
                 content = f.read(content_size)
                 self.content.append(content)
+
+    # load only the index from a binary file
+    def load_index(self) -> None:
+        with open(self.cache_file, 'rb') as f:
+            index_size_bytes = f.read(self._int_width)
+            index_size = int.from_bytes(index_size_bytes, self._byteorder)
+            for _ in range(index_size):
+                hashed = f.read(self._hash_width)
+                self.index.append(hashed)
+            
+    # clear out this cache from memory by removing references to its members, 
+    # presumably after saving it to persisent storage.
+    def offload(self) -> None:
+        del self.index
+        del self.content
+        pass
+
+    # split this cache into two separate caches, distribute half of the elements to each cache,
+    # return a tuple of the two new caches
+    def split(self) -> tuple:
+        lesser = html_cache()
+        greater = html_cache()
+
+        midpoint = len(self.index) // 2
+        lesser.index = self.index[:midpoint]
+        lesser.content = self.content[:midpoint]
+        greater.index = self.index[midpoint:]
+        greater.content = self.index[midpoint:]
+
+        self.offload()
+
+        return (lesser, greater)
